@@ -5,7 +5,7 @@ import numpy as np
 def gaussian_blur(img, strength):
     if strength == 0:
         return img
-    k = 2 * strength + 1                     
+    k = 2 * strength + 1
     return cv2.GaussianBlur(img, (k, k), 0)
 
 
@@ -43,12 +43,13 @@ def salt_pepper_noise(img, amount, rng):
 
 def degrade(img, blur=0, scale=1, gamma=1.0, noise_sigma=0, sp_amount=0.0, seed=42):
     rng = np.random.default_rng(seed)
-    out = gaussian_blur(img, blur)          
-    out = lower_resolution(out, scale)    
-    out = darken(out, gamma)                
-    out = gaussian_noise(out, noise_sigma, rng)   
-    out = salt_pepper_noise(out, sp_amount, rng)  
+    out = gaussian_blur(img, blur)
+    out = lower_resolution(out, scale)
+    out = darken(out, gamma)
+    out = gaussian_noise(out, noise_sigma, rng)
+    out = salt_pepper_noise(out, sp_amount, rng)
     return out
+
 
 PRESETS = {
     "Clean":          dict(blur=0, scale=1, gamma=1.0, noise_sigma=0,  sp_amount=0.0),
