@@ -4,6 +4,7 @@ from clearsight.loader import decode_image, limit_size, to_rgb
 from clearsight.degrade import degrade, PRESETS
 from clearsight.enhance import gamma_correct, equalize_global, equalize_clahe, denoise, sharpen
 from clearsight.segment import skin_mask_ycrcb, skin_mask_kmeans, clean_mask, locate_face, overlay_mask, draw_box, crop
+from clearsight.upscale import enlarge
 
 st.set_page_config(page_title="ClearSight", layout="wide")
 st.title("ClearSight")
@@ -39,6 +40,11 @@ with st.sidebar:
     if contrast == "CLAHE":
         clip = st.slider("CLAHE clip limit", 1.0, 5.0, 2.0, 0.5)
         tile = st.slider("CLAHE tile size", 2, 16, 8)
+
+    st.header("Face enlargement")
+    up_method = st.radio("Interpolation", ["Nearest", "Bilinear", "Bicubic"], index=2)
+    progressive = st.checkbox("Progressive (2x steps)")
+    up_sharpen = st.slider("Post-enlarge sharpening", 0.0, 2.0, 0.5, 0.1)
 
     st.subheader("3. Sharpening")
     sharpen_method = st.radio("Sharpen filter", ["None", "Unsharp mask", "Laplacian"])
@@ -106,3 +112,13 @@ if box:
     col6.image(to_rgb(crop(enhanced, box)), caption="Face crop")
 else:
     col6.warning("No face found. Try adjusting the thresholds.")
+
+
+if box:
+    st.subheader("Face enlargement")
+    th = 320
+    tw = int(box[2] * th / box[3])
+    c1, c2, c3 = st.columns(3)
+    c1.image(to_rgb(enlarge(crop(degraded, box), (tw, th), "Nearest")), caption="Degraded (plain zoom)")
+    c2.image(to_rgb(enlarge(crop(enhanced, box), (tw, th), up_method, progressive, up_sharpen)), caption=f"Enhanced + {up_method}")
+    c3.image(to_rgb(enlarge(crop(img, box), (tw, th), "Bicubic")), caption="Original (reference)")
