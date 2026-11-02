@@ -1,11 +1,15 @@
+import time
+
+import cv2
 import streamlit as st
 
-from clearsight.loader import decode_image, limit_size, to_rgb
+from clearsight.loader import decode_image, limit_size, to_rgb, open_video, open_webcam
 from clearsight.degrade import PRESETS
 from clearsight.pipeline import MODES, run
 from clearsight.segment import overlay_mask, draw_box, crop
 from clearsight.upscale import enlarge
-from clearsight.metrics import evaluate
+from clearsight.metrics import evaluate, psnr, ssim
+from clearsight.tracker import FaceTracker
 
 st.set_page_config(page_title="ClearSight", layout="wide")
 st.title("ClearSight")
@@ -79,7 +83,70 @@ deg = {name: st.session_state[name] for name in PRESETS["Clean"]}
 enh = {name: st.session_state[name] for name in MODES["Forensic"]}
 seg = dict(detect_on=detect_on, seg_method=seg_method, cr_range=cr_range, cb_range=cb_range, k=k, mask_clean=mask_clean)
 
+# ---------- Video / webcam ----------
+def play(cap, remember_position):
+    if not cap.isOpened():
+        st.error("Could not open the video source.")
+        return
+    if remember_position:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, st.session_state.get("video_pos", 0))
+    tracker = FaceTracker()
+    c1, c2, c3 = st.columns(3)
+    slots = [c1.empty(), c2.empty(), c3.empty()]
+    info = st.empty()
+    frame_no = 0
+    try:
+        while True:
+            start = time.time()
+            ok, frame = cap.read()
+            if not ok:
+                st.session_state.video_pos = 0
+                info.success("Video finished. Press Play again to restart.")
+                break
+            frame = limit_size(frame, 640)
+            res = run(frame, dict(deg, seed=frame_no), enh, seg, tracker)
+            box = res["box"]
+            slots[0].image(to_rgb(res["degraded"]), caption="Degraded")
+            slots[1].image(to_rgb(draw_box(res["enhanced"], box)), caption=f"Enhanced ({st.session_state.mode} mode)")
+            status = "no face"
+            if box:
+                face = crop(res["enhanced"], box)
+                th = 300
+                tw = int(box[2] * th / box[3])
+                slots[2].image(to_rgb(enlarge(face, (tw, th), enh["up_method"], enh["progressive"], enh["up_sharpen"])), caption="Face")
+                status = "tracking (CamShift)" if res["tracked"] else "detected (HOG / skin)"
+                status += f" | face PSNR {psnr(crop(frame, box), face):.1f} dB, SSIM {ssim(crop(frame, box), face):.3f}"
+            fps = 1 / max(time.time() - start, 1e-6)
+            info.caption(f"Frame {frame_no} | {fps:.1f} fps | {status}")
+            frame_no += 1
+            if remember_position:
+                st.session_state.video_pos = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+    finally:
+        cap.release()
+
 # ---------- Input ----------
+source_type = st.radio("Input", ["Image", "Video", "Webcam"], horizontal=True)
+
+if source_type == "Video":
+    video = st.file_uploader("Upload a video", type=["mp4", "avi", "mov", "mkv"])
+    if video is None:
+        st.info("Upload a video to begin.")
+        st.stop()
+    if st.session_state.get("video_name") != video.name:
+        st.session_state.video_name = video.name
+        st.session_state.video_pos = 0
+    if st.toggle("Play", value=True):
+        play(open_video(video.getvalue(), video.name), remember_position=True)
+    st.stop()
+
+if source_type == "Webcam":
+    cam_index = st.number_input("Camera number", 0, 5, 0, help="0, 1, 2... Try another number if the wrong camera opens.")
+    if st.toggle("Start webcam"):
+        play(open_webcam(int(cam_index)), remember_position=False)
+    else:
+        st.info("Turn on the webcam to begin.")
+    st.stop()
+
 uploaded = st.file_uploader("Upload a face image", type=["jpg", "jpeg", "png", "bmp"])
 
 if uploaded is None:

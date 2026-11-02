@@ -52,15 +52,24 @@ def skin_mask(img, s):
     return clean_mask(raw, s["mask_clean"])
 
 
-def run(img, deg, enh, seg):
+def run(img, deg, enh, seg, tracker=None):
     degraded = degrade(img, **deg)
     enhanced = enhance(degraded, enh)
     source = img if seg["detect_on"] == "Uploaded image" else degraded
-    detect_view = enhance(source, DETECT)
-    mask = skin_mask(detect_view, seg)
-    person, head, box = locate_face(detect_view, mask)
+    person = head = None
+    box = tracker.update(source) if tracker is not None and tracker.active() else None
+    tracked = box is not None
+    if tracked:
+        detect_view = source
+        mask = skin_mask(enhanced, seg)
+    else:
+        detect_view = enhance(source, DETECT)
+        mask = skin_mask(detect_view, seg)
+        person, head, box = locate_face(detect_view, mask)
+        if tracker is not None and box:
+            tracker.start(source, box)
     final = smooth_skin(enhanced, mask, box, enh["smooth"])
     return dict(
         degraded=degraded, enhanced=final, detect_view=detect_view,
-        mask=mask, person=person, head=head, box=box,
+        mask=mask, person=person, head=head, box=box, tracked=tracked,
     )
