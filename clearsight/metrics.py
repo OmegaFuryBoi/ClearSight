@@ -51,6 +51,11 @@ def lbp_hist(img):
 def lbp_similarity(ref, img):
     return float(np.minimum(lbp_hist(ref), lbp_hist(img)).sum())
 
+def brightness_hist(img, bins=64):
+    l = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)[:, :, 0]
+    hist = cv2.calcHist([l], [0], None, [bins], [0, 256]).ravel()
+    return hist / hist.sum() * 100
+
 
 def evaluate(original, degraded, enhanced):
     rows = []

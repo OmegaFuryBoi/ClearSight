@@ -3,12 +3,12 @@ import time
 import cv2
 import streamlit as st
 
-from clearsight.loader import decode_image, limit_size, to_rgb, open_video, open_webcam
+from clearsight.loader import decode_image, limit_size, to_rgb, open_video, open_webcam, save_snapshot
 from clearsight.degrade import PRESETS
 from clearsight.pipeline import MODES, run
 from clearsight.segment import overlay_mask, draw_box, crop
 from clearsight.upscale import enlarge
-from clearsight.metrics import evaluate, psnr, ssim
+from clearsight.metrics import evaluate, psnr, ssim, brightness_hist
 from clearsight.tracker import FaceTracker
 
 st.set_page_config(page_title="ClearSight", layout="wide")
@@ -17,12 +17,22 @@ st.caption("Dual-mode real-time facial enhancement")
 
 # ---------- Sidebar controls ----------
 def apply_preset():
+    if st.session_state.preset == "Custom":
+        return
     for name, value in PRESETS[st.session_state.preset].items():
         st.session_state[name] = value
 
 def apply_mode():
+    if st.session_state.mode == "Custom":
+        return
     for name, value in MODES[st.session_state.mode].items():
         st.session_state[name] = value
+
+def custom_preset():
+    st.session_state.preset = "Custom"
+
+def custom_mode():
+    st.session_state.mode = "Custom"
 
 for name, value in {**PRESETS["Clean"], **MODES["Forensic"]}.items():
     if name not in st.session_state:
@@ -30,43 +40,43 @@ for name, value in {**PRESETS["Clean"], **MODES["Forensic"]}.items():
 
 with st.sidebar:
     st.header("Degradation")
-    st.selectbox("Preset", list(PRESETS), key="preset", on_change=apply_preset)
-    st.slider("Blur", 0, 10, key="blur")
-    st.slider("Resolution drop (x)", 1, 8, key="scale")
-    st.slider("Darkness (gamma)", 1.0, 4.0, step=0.1, key="gamma")
-    st.slider("Grain (Gaussian noise)", 0, 50, key="noise_sigma")
-    st.slider("Salt & pepper noise", 0.0, 0.10, step=0.005, key="sp_amount")
+    st.selectbox("Preset", list(PRESETS) + ["Custom"], key="preset", on_change=apply_preset)
+    st.slider("Blur", 0, 10, key="blur", on_change=custom_preset)
+    st.slider("Resolution drop (x)", 1, 8, key="scale", on_change=custom_preset)
+    st.slider("Darkness (gamma)", 1.0, 4.0, step=0.1, key="gamma", on_change=custom_preset)
+    st.slider("Grain (Gaussian noise)", 0, 50, key="noise_sigma", on_change=custom_preset)
+    st.slider("Salt & pepper noise", 0.0, 0.10, step=0.005, key="sp_amount", on_change=custom_preset)
 
     st.header("Enhancement")
-    st.selectbox("Mode", list(MODES), key="mode", on_change=apply_mode)
+    st.selectbox("Mode", list(MODES) + ["Custom"], key="mode", on_change=apply_mode)
 
     st.subheader("1. Noise removal")
-    st.radio("Denoise filter", ["None", "Gaussian", "Median", "Bilateral", "Auto"], key="denoise_method")
+    st.radio("Denoise filter", ["None", "Gaussian", "Median", "Bilateral", "Auto"], key="denoise_method", on_change=custom_mode)
     if st.session_state.denoise_method != "None":
-        st.slider("Filter strength", 1, 5, key="strength")
-    st.checkbox("Denoise before brightening", key="denoise_first")
+        st.slider("Filter strength", 1, 5, key="strength", on_change=custom_mode)
+    st.checkbox("Denoise before brightening", key="denoise_first", on_change=custom_mode)
 
     st.subheader("2. Brightness & contrast")
-    st.checkbox("Auto brightness", key="auto_boost")
+    st.checkbox("Auto brightness", key="auto_boost", on_change=custom_mode)
     if not st.session_state.auto_boost:
-        st.slider("Brightness boost (gamma)", 1.0, 4.0, step=0.1, key="boost")
-    st.radio("Contrast", ["None", "Global equalization", "CLAHE"], key="contrast")
+        st.slider("Brightness boost (gamma)", 1.0, 4.0, step=0.1, key="boost", on_change=custom_mode)
+    st.radio("Contrast", ["None", "Global equalization", "CLAHE"], key="contrast", on_change=custom_mode)
     if st.session_state.contrast == "CLAHE":
-        st.slider("CLAHE clip limit", 1.0, 5.0, step=0.5, key="clip")
-        st.slider("CLAHE tile size", 2, 16, key="tile")
+        st.slider("CLAHE clip limit", 1.0, 5.0, step=0.5, key="clip", on_change=custom_mode)
+        st.slider("CLAHE tile size", 2, 16, key="tile", on_change=custom_mode)
 
     st.subheader("3. Sharpening")
-    st.radio("Sharpen filter", ["None", "Unsharp mask", "Laplacian"], key="sharpen_method")
+    st.radio("Sharpen filter", ["None", "Unsharp mask", "Laplacian"], key="sharpen_method", on_change=custom_mode)
     if st.session_state.sharpen_method != "None":
-        st.slider("Sharpen amount", 0.1, 3.0, step=0.1, key="amount")
+        st.slider("Sharpen amount", 0.1, 3.0, step=0.1, key="amount", on_change=custom_mode)
 
     st.subheader("4. Skin smoothing")
-    st.slider("Smoothing", 0.0, 1.0, step=0.1, key="smooth")
+    st.slider("Smoothing", 0.0, 1.0, step=0.1, key="smooth", on_change=custom_mode)
 
     st.header("Face enlargement")
-    st.radio("Interpolation", ["Nearest", "Bilinear", "Bicubic"], key="up_method")
-    st.checkbox("Progressive (2x steps)", key="progressive")
-    st.slider("Post-enlarge sharpening", 0.0, 2.0, step=0.1, key="up_sharpen")
+    st.radio("Interpolation", ["Nearest", "Bilinear", "Bicubic"], key="up_method", on_change=custom_mode)
+    st.checkbox("Progressive (2x steps)", key="progressive", on_change=custom_mode)
+    st.slider("Post-enlarge sharpening", 0.0, 2.0, step=0.1, key="up_sharpen", on_change=custom_mode)
 
     st.header("Face detection")
     detect_on = st.radio("Detect face on", ["Uploaded image", "Degraded image"])
@@ -159,12 +169,40 @@ h, w = img.shape[:2]
 # ---------- Processing ----------
 res = run(img, deg, enh, seg)
 degraded, enhanced, box = res["degraded"], res["enhanced"], res["box"]
+rows = evaluate(crop(img, box), crop(degraded, box), crop(enhanced, box)) if box else None
 
 # ---------- Display ----------
+if st.button("Save snapshot"):
+    images = list(res["stages"])
+    if box:
+        th = 320
+        tw = int(box[2] * th / box[3])
+        images += [
+            ("Face degraded", enlarge(crop(degraded, box), (tw, th), "Nearest")),
+            ("Face enhanced", enlarge(crop(enhanced, box), (tw, th), enh["up_method"], enh["progressive"], enh["up_sharpen"])),
+            ("Face original", enlarge(crop(img, box), (tw, th), "Bicubic")),
+        ]
+    settings = dict(preset=st.session_state.preset, mode=st.session_state.mode, degradation=deg, enhancement=enh, detection=seg)
+    st.success(f"Saved to {save_snapshot(images, rows, settings)}")
+
 col1, col2, col3 = st.columns(3)
 col1.image(to_rgb(img), caption=f"Original ({w} x {h})")
 col2.image(to_rgb(degraded), caption="Degraded")
 col3.image(to_rgb(enhanced), caption=f"Enhanced ({st.session_state.mode} mode)")
+
+with st.expander("Pipeline stages"):
+    cols = st.columns(3)
+    for i, (name, stage) in enumerate(res["stages"]):
+        cols[i % 3].image(to_rgb(stage), caption=f"{i + 1}. {name}")
+
+st.subheader("Brightness histograms")
+hist = {name: brightness_hist(im) for name, im in (("Original", img), ("Degraded", degraded), ("Enhanced", enhanced))}
+hist["Brightness"] = list(range(0, 256, 4))
+st.line_chart(
+    hist, x="Brightness", y=["Original", "Degraded", "Enhanced"],
+    color=["#2a78d6", "#eb6834", "#1baf7a"],
+    x_label="Brightness (0 = black, 255 = white)", y_label="% of pixels",
+)
 
 st.subheader("Face detection")
 col4, col5, col6 = st.columns(3)
@@ -188,7 +226,6 @@ if box:
     c3.image(to_rgb(enlarge(crop(img, box), (tw, th), "Bicubic")), caption="Original (reference)")
 
     st.subheader("Scores (face region)")
-    rows = evaluate(crop(img, box), crop(degraded, box), crop(enhanced, box))
     before, after = rows[1], rows[2]
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("PSNR (dB)", after["PSNR (dB)"], round(after["PSNR (dB)"] - before["PSNR (dB)"], 2))

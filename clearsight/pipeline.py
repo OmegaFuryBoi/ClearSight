@@ -30,18 +30,29 @@ DETECT = dict(
 )
 
 
-def enhance(img, s):
+def enhance(img, s, stages=None):
+    stages = [] if stages is None else stages
     out = img
-    if s["denoise_first"]:
+    if s["denoise_first"] and s["denoise_method"] != "None":
         out = denoise(out, s["denoise_method"], s["strength"])
-    out = gamma_correct(out, auto_gamma(out) if s["auto_boost"] else 1 / s["boost"])
+        stages.append((f"Denoised ({s['denoise_method']})", out))
+    g = auto_gamma(out) if s["auto_boost"] else 1 / s["boost"]
+    if g != 1.0:
+        out = gamma_correct(out, g)
+        stages.append((f"Brightened (gamma {g:.2f})", out))
     if s["contrast"] == "Global equalization":
         out = equalize_global(out)
+        stages.append(("Global equalization", out))
     elif s["contrast"] == "CLAHE":
         out = equalize_clahe(out, s["clip"], s["tile"])
-    if not s["denoise_first"]:
+        stages.append(("CLAHE", out))
+    if not s["denoise_first"] and s["denoise_method"] != "None":
         out = denoise(out, s["denoise_method"], s["strength"])
-    return sharpen(out, s["sharpen_method"], s["amount"])
+        stages.append((f"Denoised ({s['denoise_method']})", out))
+    if s["sharpen_method"] != "None":
+        out = sharpen(out, s["sharpen_method"], s["amount"])
+        stages.append((f"Sharpened ({s['sharpen_method']})", out))
+    return out
 
 
 def skin_mask(img, s):
@@ -54,7 +65,8 @@ def skin_mask(img, s):
 
 def run(img, deg, enh, seg, tracker=None):
     degraded = degrade(img, **deg)
-    enhanced = enhance(degraded, enh)
+    stages = [("Original", img), ("Degraded", degraded)]
+    enhanced = enhance(degraded, enh, stages)
     source = img if seg["detect_on"] == "Uploaded image" else degraded
     person = head = None
     box = tracker.update(source) if tracker is not None and tracker.active() else None
@@ -69,7 +81,9 @@ def run(img, deg, enh, seg, tracker=None):
         if tracker is not None and box:
             tracker.start(source, box)
     final = smooth_skin(enhanced, mask, box, enh["smooth"])
+    if final is not enhanced:
+        stages.append(("Skin smoothed", final))
     return dict(
         degraded=degraded, enhanced=final, detect_view=detect_view,
-        mask=mask, person=person, head=head, box=box, tracked=tracked,
+        mask=mask, person=person, head=head, box=box, tracked=tracked, stages=stages,
     )
