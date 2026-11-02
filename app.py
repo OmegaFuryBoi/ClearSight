@@ -3,6 +3,7 @@ import streamlit as st
 from clearsight.loader import decode_image, limit_size, to_rgb
 from clearsight.degrade import degrade, PRESETS
 from clearsight.enhance import gamma_correct, equalize_global, equalize_clahe, denoise, sharpen
+from clearsight.segment import skin_mask_ycrcb, skin_mask_kmeans, clean_mask, locate_face, overlay_mask, draw_box, crop
 
 st.set_page_config(page_title="ClearSight", layout="wide")
 st.title("ClearSight")
@@ -13,7 +14,6 @@ def apply_preset():
     for name, value in PRESETS[st.session_state.preset].items():
         st.session_state[name] = value
 
-# First run only: start every slider at the "Clean" values
 for name, value in PRESETS["Clean"].items():
     if name not in st.session_state:
         st.session_state[name] = value
@@ -43,6 +43,14 @@ with st.sidebar:
     st.subheader("3. Sharpening")
     sharpen_method = st.radio("Sharpen filter", ["None", "Unsharp mask", "Laplacian"])
     amount = st.slider("Sharpen amount", 0.1, 3.0, 1.0, 0.1) if sharpen_method != "None" else 0
+    st.header("Face detection")
+    seg_method = st.radio("Skin segmentation", ["YCrCb threshold", "K-means"])
+    if seg_method == "YCrCb threshold":
+        cr_range = st.slider("Cr range", 0, 255, (133, 173))
+        cb_range = st.slider("Cb range", 0, 255, (77, 127))
+    else:
+        k = st.slider("Clusters (k)", 2, 6, 3)
+    mask_clean = st.slider("Mask cleanup size", 1, 21, 7, 2)
 
 # ---------- Input ----------
 uploaded = st.file_uploader("Upload a face image", type=["jpg", "jpeg", "png", "bmp"])
@@ -73,8 +81,28 @@ if not denoise_first:
 
 enhanced = sharpen(enhanced, sharpen_method, amount)
 
+
+if seg_method == "YCrCb threshold":
+    raw_mask = skin_mask_ycrcb(enhanced, *cr_range, *cb_range)
+else:
+    raw_mask = skin_mask_kmeans(enhanced, k)
+mask = clean_mask(raw_mask, mask_clean)
+person, head, box = locate_face(enhanced, mask)
+
 # ---------- Display ----------
 col1, col2, col3 = st.columns(3)
 col1.image(to_rgb(img), caption=f"Original ({w} x {h})")
 col2.image(to_rgb(degraded), caption="Degraded")
 col3.image(to_rgb(enhanced), caption="Enhanced")
+
+st.subheader("Face detection")
+col4, col5, col6 = st.columns(3)
+col4.image(to_rgb(overlay_mask(enhanced, mask)), caption="Skin mask")
+boxed = draw_box(enhanced, person, (255, 0, 0))
+boxed = draw_box(boxed, head, (0, 255, 255))
+boxed = draw_box(boxed, box, (0, 255, 0))
+col5.image(to_rgb(boxed), caption="HOG person → head → face" if person else "No person found: close-up mode")
+if box:
+    col6.image(to_rgb(crop(enhanced, box)), caption="Face crop")
+else:
+    col6.warning("No face found. Try adjusting the thresholds.")
