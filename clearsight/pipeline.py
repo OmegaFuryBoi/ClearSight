@@ -80,6 +80,10 @@ def run(img, deg, enh, seg, tracker=None):
         person, head, box = locate_face(detect_view, mask)
         if tracker is not None and box:
             tracker.start(source, box)
+        elif tracker is not None and tracker.box is not None:
+            tracker.frames = 0
+            box = tracker.update(source)
+            tracked = box is not None
     final = smooth_skin(enhanced, mask, box, enh["smooth"])
     if final is not enhanced:
         stages.append(("Skin smoothed", final))

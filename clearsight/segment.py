@@ -72,13 +72,16 @@ def find_face_in_region(mask, region, min_area=0.01, pad_x=0.2, pad_top=0.4, max
     return x + x0, y + y0, x1 - x0, y1 - y0
 
 
-def locate_face(img, mask):
+def locate_face(img, mask, max_width_ratio=1.3):
     person = detect_person(img)
     if person:
         region = head_region(person)
         return person, region, find_face_in_region(mask, region) or region
     H, W = mask.shape
-    return None, None, find_face_in_region(mask, (0, 0, W, H))
+    box = find_face_in_region(mask, (0, 0, W, H))
+    if box and box[2] > max_width_ratio * box[3]:
+        box = None
+    return None, None, box
 
 
 def overlay_mask(img, mask, color=(0, 255, 0), alpha=0.4):
