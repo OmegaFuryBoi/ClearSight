@@ -86,10 +86,12 @@ def sharpen(img, method, amount):
         return sharpen_laplacian(img, amount)
     return img
 
-def auto_gamma(img):
+def auto_gamma(img, target=0.4):
     l = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)[:, :, 0]
     mean = np.clip(l.mean() / 255.0, 0.01, 0.99)
-    return float(np.clip(np.log(0.5) / np.log(mean), 0.25, 1.0))
+    if mean >= target:
+        return 1.0
+    return float(np.clip(np.log(target) / np.log(mean), 0.25, 1.0))
 
 
 def smooth_skin(img, mask, box, strength):

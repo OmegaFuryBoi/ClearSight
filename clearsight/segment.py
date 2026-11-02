@@ -31,7 +31,7 @@ def clean_mask(mask, size=7):
     return cv2.medianBlur(mask, size)
 
 
-def detect_person(img, work_width=400):
+def detect_person(img, work_width=400, min_height=0.6):
     f = work_width / img.shape[1]
     small = cv2.resize(img, None, fx=f, fy=f, interpolation=cv2.INTER_AREA)
     rects, weights = _hog.detectMultiScale(small, winStride=(4, 4), padding=(16, 16), scale=1.03)
@@ -39,6 +39,8 @@ def detect_person(img, work_width=400):
         return None
     x, y, w, h = rects[int(np.argmax(weights))]
     H, W = img.shape[:2]
+    if h / f < min_height * H:
+        return None
     x0, y0 = max(0, int(x / f)), max(0, int(y / f))
     x1, y1 = min(W, int((x + w) / f)), min(H, int((y + h) / f))
     return x0, y0, x1 - x0, y1 - y0

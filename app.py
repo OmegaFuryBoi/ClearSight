@@ -5,6 +5,7 @@ from clearsight.degrade import PRESETS
 from clearsight.pipeline import MODES, run
 from clearsight.segment import overlay_mask, draw_box, crop
 from clearsight.upscale import enlarge
+from clearsight.metrics import evaluate
 
 st.set_page_config(page_title="ClearSight", layout="wide")
 st.title("ClearSight")
@@ -118,3 +119,15 @@ if box:
     c1.image(to_rgb(enlarge(crop(degraded, box), (tw, th), "Nearest")), caption="Degraded (plain zoom)")
     c2.image(to_rgb(enlarge(crop(enhanced, box), (tw, th), enh["up_method"], enh["progressive"], enh["up_sharpen"])), caption=f"Enhanced + {enh['up_method']}")
     c3.image(to_rgb(enlarge(crop(img, box), (tw, th), "Bicubic")), caption="Original (reference)")
+
+    st.subheader("Scores (face region)")
+    rows = evaluate(crop(img, box), crop(degraded, box), crop(enhanced, box))
+    before, after = rows[1], rows[2]
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("PSNR (dB)", after["PSNR (dB)"], round(after["PSNR (dB)"] - before["PSNR (dB)"], 2))
+    m2.metric("SSIM", after["SSIM"], round(after["SSIM"] - before["SSIM"], 3))
+    m3.metric("LBP similarity", after["LBP similarity"], round(after["LBP similarity"] - before["LBP similarity"], 3))
+    m4.metric("Sharpness", after["Sharpness"], round(after["Sharpness"] - before["Sharpness"], 1), delta_color="off")
+    m5.metric("Edge density (%)", after["Edge density (%)"], round(after["Edge density (%)"] - before["Edge density (%)"], 2), delta_color="off")
+    st.dataframe(rows, hide_index=True)
+    st.caption("PSNR, SSIM and LBP compare each image with the original: higher means closer. Sharpness and edge density have no 'better' direction, since noise inflates both: closer to the Original row is better.")

@@ -4,9 +4,9 @@ from clearsight.segment import skin_mask_ycrcb, skin_mask_kmeans, clean_mask, lo
 
 MODES = {
     "Forensic": dict(
-        denoise_method="Auto", strength=2, denoise_first=True,
-        auto_boost=True, boost=1.0, contrast="CLAHE", clip=2.0, tile=8,
-        sharpen_method="Unsharp mask", amount=0.6, smooth=0.0,
+        denoise_method="Auto", strength=3, denoise_first=True,
+        auto_boost=True, boost=1.0, contrast="None", clip=2.0, tile=8,
+        sharpen_method="None", amount=1.0, smooth=0.0,
         up_method="Bicubic", progressive=True, up_sharpen=0.5,
     ),
     "Beauty": dict(
