@@ -5,7 +5,7 @@ import numpy as np
 def gaussian_blur(img, strength):
     if strength == 0:
         return img
-    k = 2 * strength + 1                      # kernel size must be odd: 3, 5, 7...
+    k = 2 * strength + 1                     
     return cv2.GaussianBlur(img, (k, k), 0)
 
 
@@ -43,9 +43,18 @@ def salt_pepper_noise(img, amount, rng):
 
 def degrade(img, blur=0, scale=1, gamma=1.0, noise_sigma=0, sp_amount=0.0, seed=42):
     rng = np.random.default_rng(seed)
-    out = gaussian_blur(img, blur)            # lens is out of focus
-    out = lower_resolution(out, scale)        # camera sensor is low-res
-    out = darken(out, gamma)                  # poor lighting
-    out = gaussian_noise(out, noise_sigma, rng)   # sensor grain
-    out = salt_pepper_noise(out, sp_amount, rng)  # faulty pixels
+    out = gaussian_blur(img, blur)          
+    out = lower_resolution(out, scale)    
+    out = darken(out, gamma)                
+    out = gaussian_noise(out, noise_sigma, rng)   
+    out = salt_pepper_noise(out, sp_amount, rng)  
     return out
+
+PRESETS = {
+    "Clean":          dict(blur=0, scale=1, gamma=1.0, noise_sigma=0,  sp_amount=0.0),
+    "Night CCTV":     dict(blur=1, scale=2, gamma=2.5, noise_sigma=25, sp_amount=0.0),
+    "Distant camera": dict(blur=3, scale=6, gamma=1.0, noise_sigma=5,  sp_amount=0.0),
+    "Old webcam":     dict(blur=2, scale=3, gamma=1.5, noise_sigma=15, sp_amount=0.0),
+    "Faulty sensor":  dict(blur=0, scale=1, gamma=1.2, noise_sigma=5,  sp_amount=0.04),
+    "Worst case":     dict(blur=4, scale=5, gamma=2.8, noise_sigma=30, sp_amount=0.02),
+}
