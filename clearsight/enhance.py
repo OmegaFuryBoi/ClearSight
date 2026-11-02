@@ -39,6 +39,19 @@ def denoise_bilateral(img, strength):
     return cv2.bilateralFilter(img, 9, s, s)
 
 
+def has_impulse_noise(img, threshold=0.0005):
+    g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    extreme = (g == 0) | (g == 255)
+    spikes = cv2.absdiff(g, cv2.medianBlur(g, 3)) > 60
+    return np.mean(extreme & spikes) > threshold
+
+
+def denoise_auto(img, strength):
+    if has_impulse_noise(img):
+        img = denoise_median(img, 1)
+    return denoise_bilateral(img, strength)
+
+
 def denoise(img, method, strength):
     if method == "Gaussian":
         return denoise_gaussian(img, strength)
@@ -46,6 +59,8 @@ def denoise(img, method, strength):
         return denoise_median(img, strength)
     if method == "Bilateral":
         return denoise_bilateral(img, strength)
+    if method == "Auto":
+        return denoise_auto(img, strength)
     return img
 
 
@@ -70,3 +85,22 @@ def sharpen(img, method, amount):
     if method == "Laplacian":
         return sharpen_laplacian(img, amount)
     return img
+
+def auto_gamma(img):
+    l = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)[:, :, 0]
+    mean = np.clip(l.mean() / 255.0, 0.01, 0.99)
+    return float(np.clip(np.log(0.5) / np.log(mean), 0.25, 1.0))
+
+
+def smooth_skin(img, mask, box, strength):
+    if strength == 0 or box is None:
+        return img
+    x, y, w, h = box
+    face = img[y:y + h, x:x + w]
+    smooth = cv2.bilateralFilter(face, 9, 60, 60)
+    smooth = cv2.bilateralFilter(smooth, 9, 60, 60)
+    weight = cv2.GaussianBlur(mask[y:y + h, x:x + w], (0, 0), 3).astype(np.float32) / 255 * strength
+    weight = weight[:, :, None]
+    out = img.copy()
+    out[y:y + h, x:x + w] = (face * (1 - weight) + smooth * weight).astype(np.uint8)
+    return out
